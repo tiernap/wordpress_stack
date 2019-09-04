@@ -1,9 +1,10 @@
 # WordPress Stack
 
-This project is to build a wordpress app stack in 1: Docker and 2: Openshift
+This project is to deploy a wordpress app stack in 1: Docker and 2: Openshift
 
 ## 1. Docker
 This stack uses docker compose to deploy two containers: db & app
+The app container is built using Dockerfile.
 
 Requirements:
 
