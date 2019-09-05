@@ -29,3 +29,6 @@ COPY buildconf/wp-config.php /var/www/html/
 RUN apt-get -qy autoremove \
     && apt-get remove -yq unzip \
     && rm wordpress-4.9.5.zip
+
+# expose ports
+EXPOSE 80
