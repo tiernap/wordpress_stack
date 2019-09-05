@@ -128,8 +128,8 @@
           "spec": {
             "containers": [
               {
-                "name": "${APPLICATION_NAME}",
-                "image": "${APPLICATION_NAME}-image:latest",
+                "name": "wordpress",
+                "image": "${APPLICATION_NAME}-image",
                 "ports": [
                   {
                     "containerPort": 8080,
