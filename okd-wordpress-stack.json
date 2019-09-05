@@ -1,0 +1,409 @@
+{
+  "kind": "Template",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "wordpress",
+    "annotations": {
+      "openshift.io/display-name": "WordPress Stack",
+      "description": "This is a test wordpress Stack"
+    }
+  },
+  "parameters": [
+    {
+      "name": "APPLICATION_NAME",
+      "description": "The name of the application instance.",
+      "value": "wordpress-stack",
+      "from": "[a-zA-Z0-9]",
+      "required": true
+    },
+    {
+      "name": "WORDPRESS_DB_USER",
+      "description": "The name of the database user.",
+      "from": "user[a-f0-9]{8}",
+      "generate": "expression"
+    },
+    {
+      "name": "WORDPRESS_DB_PASS",
+      "description": "The password for the database user.",
+      "from": "[a-zA-Z0-9]{12}",
+      "generate": "expression"
+    }
+  ],
+  "objects": [
+    {
+      "kind": "ImageStream",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}-image",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      }
+    },
+    {
+      "kind": "BuildConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      },
+      "spec": {
+        "triggers": [
+          {
+            "type": "ConfigChange"
+          },
+          {
+            "type": "ImageChange"
+          }
+        ],
+        "source": {
+          "type": "Git",
+          "git": {
+            "uri": "git://github.com/tiernap/wordpress_stack.git",
+            "ref": "master"
+          },
+          "contextDir": ""
+        },
+        "strategy": {
+          "type": "Docker",
+          "dockerStrategy": {}
+        },
+        "output": {
+          "to": {
+            "kind": "ImageStreamTag",
+            "name": "${APPLICATION_NAME}-image:latest"
+          }
+        },
+        "resources": {}
+      },
+      "status": {
+        "lastVersion": 0
+      }
+    },
+    {
+      "kind": "DeploymentConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      },
+      "spec": {
+        "strategy": {
+          "type": "Recreate"
+        },
+        "triggers": [
+          {
+            "type": "ConfigChange"
+          },
+          {
+            "type": "ImageChange",
+            "imageChangeParams": {
+              "automatic": true,
+              "containerNames": [
+                "wordpress"
+              ],
+              "from": {
+                "kind": "ImageStreamTag",
+                "name": "${APPLICATION_NAME}-image:latest"
+              }
+            }
+          }
+        ],
+        "replicas": 1,
+        "selector": {
+          "app": "${APPLICATION_NAME}",
+          "deploymentconfig": "${APPLICATION_NAME}"
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "${APPLICATION_NAME}",
+              "deploymentconfig": "${APPLICATION_NAME}"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "${APPLICATION_NAME}",
+                "image": "${APPLICATION_NAME}-image:latest",
+                "ports": [
+                  {
+                    "containerPort": 8080,
+                    "protocol": "TCP"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "failureThreshold": 3,
+                  "httpGet": {
+                    "path": "/wp-admin/install.php",
+                    "port": 8080,
+                    "scheme": "HTTP",
+                    "httpHeaders": [
+                      {
+                        "name": "X-Forwarded-Proto",
+                        "value": "https"
+                      }
+                    ]
+                  },
+                  "periodSeconds": 10,
+                  "successThreshold": 1,
+                  "timeoutSeconds": 1
+                },
+                "livenessProbe": {
+                  "failureThreshold": 3,
+                  "httpGet": {
+                    "path": "/wp-admin/install.php",
+                    "port": 8080,
+                    "scheme": "HTTP",
+                    "httpHeaders": [
+                      {
+                        "name": "X-Forwarded-Proto",
+                        "value": "https"
+                      }
+                    ]
+                  },
+                  "periodSeconds": 10,
+                  "successThreshold": 1,
+                  "timeoutSeconds": 1
+                },
+                "env": [
+                  {
+                    "name": "WORDPRESS_DB_NAME",
+                    "value": "wordpress"
+                  },
+                  {
+                    "name": "WORDPRESS_DB_USER",
+                    "value": "${WORDPRESS_DB_USER}"
+                  },
+                  {
+                    "name": "WORDPRESS_DB_PASS",
+                    "value": "${WORDPRESS_DB_PASS}"
+                  },
+                  {
+                    "name": "WORDPRESS_DB_HOST",
+                    "value": "${APPLICATION_NAME}-db"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "DeploymentConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}-db",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      },
+      "spec": {
+        "strategy": {
+          "type": "Recreate"
+        },
+        "triggers": [
+          {
+            "type": "ConfigChange"
+          },
+          {
+            "type": "ImageChange",
+            "imageChangeParams": {
+              "automatic": true,
+              "containerNames": [
+                "mysql"
+              ],
+              "from": {
+                "kind": "ImageStreamTag",
+                "namespace": "openshift",
+                "name": "mysql:5.7"
+              }
+            }
+          }
+        ],
+        "replicas": 1,
+        "selector": {
+          "app": "${APPLICATION_NAME}",
+          "deploymentconfig": "${APPLICATION_NAME}-db"
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "${APPLICATION_NAME}",
+              "deploymentconfig": "${APPLICATION_NAME}-db"
+            }
+          },
+          "spec": {
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "${APPLICATION_NAME}-mysql-data"
+                }
+              }
+            ],
+            "containers": [
+              {
+                "name": "mysql",
+                "image": "mysql",
+                "ports": [
+                  {
+                    "containerPort": 3306,
+                    "protocol": "TCP"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "timeoutSeconds": 1,
+                  "initialDelaySeconds": 5,
+                  "exec": {
+                    "command": [
+                      "/bin/sh",
+                      "-i",
+                      "-c",
+                      "MYSQL_PWD=\"$MYSQL_PASSWORD\" mysql -h 127.0.0.1 -u $MYSQL_USER -D $MYSQL_DATABASE -e 'SELECT 1'"
+                    ]
+                  }
+                },
+                "livenessProbe": {
+                  "timeoutSeconds": 1,
+                  "initialDelaySeconds": 30,
+                  "tcpSocket": {
+                    "port": 3306
+                  }
+                },
+                "env": [
+                  {
+                    "name": "MYSQL_DATABASE",
+                    "value": "wordpress"
+                  },
+                  {
+                    "name": "MYSQL_USER",
+                    "value": "${WORDPRESS_DB_USER}"
+                  },
+                  {
+                    "name": "MYSQL_PASSWORD",
+                    "value": "${WORDPRESS_DB_PASS}"
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/mysql"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "Service",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "8080-tcp",
+            "protocol": "TCP",
+            "port": 8080,
+            "targetPort": 8080
+          }
+        ],
+        "selector": {
+          "app": "${APPLICATION_NAME}",
+          "deploymentconfig": "${APPLICATION_NAME}"
+        }
+      }
+    },
+    {
+      "kind": "Service",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}-db",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "3306-tcp",
+            "protocol": "TCP",
+            "port": 3306,
+            "targetPort": 3306
+          }
+        ],
+        "selector": {
+          "app": "${APPLICATION_NAME}",
+          "deploymentconfig": "${APPLICATION_NAME}-db"
+        }
+      }
+    },
+    {
+      "kind": "Route",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      },
+      "spec": {
+        "host": "",
+        "to": {
+          "kind": "Service",
+          "name": "${APPLICATION_NAME}",
+          "weight": 100
+        },
+        "port": {
+          "targetPort": 8080
+        },
+        "tls": {
+          "termination": "edge",
+          "insecureEdgeTerminationPolicy": "Allow"
+        }
+      }
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APPLICATION_NAME}-mysql-data",
+        "labels": {
+          "app": "${APPLICATION_NAME}"
+        }
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "100Mi"
+          }
+        }
+      }
+    }
+  ]
+}
